@@ -6,6 +6,10 @@
   "engines": {
     "vscode": "^1.78.0"
   },
+  "publisher": "yangxiaolang",
+  "repository": {
+    "url": "https://github.com/yangxiaolang/icon-symbol-preview"
+  },
   "categories": [
     "Other"
   ],

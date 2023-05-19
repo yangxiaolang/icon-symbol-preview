@@ -1,6 +1,5 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import * as fs from "fs";
 
 export function activate(context: vscode.ExtensionContext) {
   let disposable = vscode.commands.registerCommand(
@@ -11,35 +10,40 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage("No workspace is opened.");
         return;
       }
-      const files = await getFiles(rootPath);
+
+      const files = await vscode.workspace.findFiles(
+        "**/*",
+        "**/{node_modules,.git}/**"
+      );
+      const items = files.map((file) => {
+        return { label: path.relative(rootPath, file.fsPath) };
+      });
       const options: vscode.QuickPickOptions = {
         canPickMany: false,
         placeHolder: "Select a file",
       };
-      const file = await vscode.window.showQuickPick(
-        files.filter((file) => !file.startsWith(".git")),
-        options
-      );
+
+      const file = await vscode.window.showQuickPick(items, options);
       if (!file) {
         vscode.window.showInformationMessage("Not Select Icon Symbol File");
         return;
       }
 
-      const filePath = path.join(rootPath, file);
+      const filePath = path.join(rootPath, file.label);
       const document = await vscode.workspace.openTextDocument(filePath);
       const symbols = document
         .getText()
         .match(/<symbol [^>]*>(.*?)<\/symbol>/g) as string[];
-
-      if (symbols.length === 0) {
+      if (!symbols || symbols.length === 0) {
         vscode.window.showInformationMessage(
           "Select File doesn't have Icon Symbol"
         );
+        return;
       }
 
       const panel = vscode.window.createWebviewPanel(
         "iconSymbolPreview",
-        `Icon Preview - ${file}`,
+        `Icon Preview - ${file.label}`,
         vscode.ViewColumn.One,
         {
           enableScripts: true,
@@ -47,7 +51,7 @@ export function activate(context: vscode.ExtensionContext) {
       );
 
       const styleUri = panel.webview.asWebviewUri(
-        vscode.Uri.joinPath(context.extensionUri, "src", "styles", "index.css")
+        vscode.Uri.joinPath(context.extensionUri, "styles", "index.css")
       );
       panel.webview.html = getWebviewContent(symbols, styleUri);
 
@@ -55,7 +59,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (message.command === "copyToClipboard") {
           vscode.env.clipboard.writeText(message.text);
           vscode.window.showInformationMessage(
-            `Symbol ID: '${message.text}' has been copied to Clipboard!`,
+            `Symbol ID: '${message.text}' has been copied to Clipboard!`
           );
         }
       });
@@ -67,21 +71,6 @@ export function activate(context: vscode.ExtensionContext) {
 
 // This method is called when your extension is deactivated
 export function deactivate() {}
-
-async function getFiles(dir: string): Promise<string[]> {
-  const files = await fs.promises.readdir(dir);
-  const result: string[] = [];
-  for (const file of files) {
-    const filePath = path.join(dir, file);
-    const stat = await fs.promises.stat(filePath);
-    if (stat.isDirectory()) {
-      result.push(...(await getFiles(filePath)).map((f) => path.join(file, f)));
-    } else {
-      result.push(file);
-    }
-  }
-  return result;
-}
 
 function icon(symbol: string) {
   const id = symbol.match(/<symbol\s[^>]*id="([^"]+)"/)?.[1];
