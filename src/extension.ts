@@ -1,5 +1,3 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
@@ -56,10 +54,9 @@ export function activate(context: vscode.ExtensionContext) {
       panel.webview.onDidReceiveMessage((message) => {
         if (message.command === "copyToClipboard") {
           vscode.env.clipboard.writeText(message.text);
-        //   vscode.window.showInformationMessage(
-        //     `Symbol ID: '${message.text}' has been copied to Clipboard!`,
-        //   );
-          vscode.window.setStatusBarMessage(`Symbol ID: '${message.text}' has been copied to Clipboard!`,2000)
+          vscode.window.showInformationMessage(
+            `Symbol ID: '${message.text}' has been copied to Clipboard!`,
+          );
         }
       });
     }
