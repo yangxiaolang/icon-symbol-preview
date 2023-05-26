@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import * as path from "path";
+import axios from 'axios'
 
 export function activate(context: vscode.ExtensionContext) {
   let disposable = vscode.commands.registerCommand(
@@ -13,7 +14,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       const files = await vscode.workspace.findFiles(
         "**/*",
-        "**/{node_modules,.git}/**"
+        "**/{node_modules,.git,.angular}/**"
       );
       const items = files.map((file) => {
         return { label: path.relative(rootPath, file.fsPath) };
@@ -41,36 +42,78 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      const panel = vscode.window.createWebviewPanel(
-        "iconSymbolPreview",
-        `Icon Preview - ${file.label}`,
-        vscode.ViewColumn.One,
-        {
-          enableScripts: true,
-        }
-      );
-
+      const panel = openWebViewToPreviewIcon(file.label);
       const styleUri = panel.webview.asWebviewUri(
         vscode.Uri.joinPath(context.extensionUri, "styles", "index.css")
       );
       panel.webview.html = getWebviewContent(symbols, styleUri);
-
-      panel.webview.onDidReceiveMessage((message) => {
-        if (message.command === "copyToClipboard") {
-          vscode.env.clipboard.writeText(message.text);
-          vscode.window.showInformationMessage(
-            `Symbol ID: '${message.text}' has been copied to Clipboard!`
-          );
-        }
-      });
     }
   );
 
-  context.subscriptions.push(disposable);
+  let disposableRemote = vscode.commands.registerCommand(
+    "icon-symbol-preview.pickIconSymbolTemplateRemoteFile",
+    async () => {
+
+      const options = {
+        placeHolder: 'Enter the URL',
+        prompt: 'Please enter a URL with schema',
+      };
+    
+      const url = await vscode.window.showInputBox(options);
+
+      if(!url){
+        vscode.window.showErrorMessage("Invalid URL");
+        return;
+      }
+      try{
+        const documentText = await axios.get<string>(url);
+        const symbols = documentText.data
+        .match(/<symbol [^>]*>(.*?)<\/symbol>/g) as string[];
+      if (!symbols || symbols.length === 0) {
+        vscode.window.showInformationMessage(
+          "Select File doesn't have Icon Symbol"
+        );
+        return;
+      }
+
+      const panel = openWebViewToPreviewIcon(url);
+      const styleUri = panel.webview.asWebviewUri(
+        vscode.Uri.joinPath(context.extensionUri, "styles", "index.css")
+      );
+      panel.webview.html = getWebviewContent(symbols, styleUri);
+      }catch(err){
+        vscode.window.showErrorMessage(String(err));
+      }
+    }
+  );
+
+  context.subscriptions.push(disposable,disposableRemote);
 }
 
 // This method is called when your extension is deactivated
 export function deactivate() {}
+
+function openWebViewToPreviewIcon(label?: string) {
+  const panel = vscode.window.createWebviewPanel(
+    "iconSymbolPreview",
+    label ? `Icon Preview - ${label}` : `Icon Preview`,
+    vscode.ViewColumn.One,
+    {
+      enableScripts: true,
+      enableFindWidget: true,
+    }
+  );
+
+  panel.webview.onDidReceiveMessage((message) => {
+    if (message.command === "copyToClipboard") {
+      vscode.env.clipboard.writeText(message.text);
+      vscode.window.showInformationMessage(
+        `Symbol ID: '${message.text}' has been copied to Clipboard!`
+      );
+    }
+  });
+  return panel;
+}
 
 function icon(symbol: string) {
   const id = symbol.match(/<symbol\s[^>]*id="([^"]+)"/)?.[1];
@@ -85,8 +128,6 @@ function icon(symbol: string) {
 }
 
 function getWebviewContent(symbols: string[], styleUri: vscode.Uri) {
-  const icons = symbols.map(icon).join("");
-
   return `
   <!DOCTYPE html>
   <html lang="en">
@@ -101,7 +142,7 @@ function getWebviewContent(symbols: string[], styleUri: vscode.Uri) {
           ${symbols.join("")}
       </svg>
       <div class="container">
-          ${icons}
+          ${symbols.map(icon).join("")}
       </div>
       <script>
           const vscode = acquireVsCodeApi();
